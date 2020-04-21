@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates S3 Bucket
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Provisioning Details"
+        Parameters:
+          - ParameterProvisionerName
+          - ParameterProvisionMethod
+      -
+        Label:
+          default: "Application & Environment Details"
+        Parameters:
+          - ParameterApplication
+          - ParameterEnvironmentType
+          - ParameterEnvironment
+          - ParameterOrganization
+          - ParameterArea
+      -
+        Label:
+          default: "Instance Details"
+        Parameters:
+          - ParameterInstanceName
+          - ParameterInstanceAmiId
+          - ParameterInstanceType
+          - ParameterInstanceDisableApiTermination
+          - ParameterInstanceKeyName
+          - ParameterInstanceRootVolumeSize
+
+Parameters:
+  # Provisioning Parameters
+  ParameterProvisionerName:
+    Type: String
+    Default: The Dude
+  ParameterProvisionMethod:
+    Type: String
+    Default: CF Stack Provisioned Manually From Template
+  # Application & Environment Parameters
+  ParameterApplication:
+    Type: String
+    Default: auditlinuxhosts
+  ParameterEnvironmentType:
+    Type: String
+    Default: production
+  ParameterEnvironment:
+    Type: String
+    Default: prod
+  ParameterOrganization:
+    Type: String
+    Default: angieslist
+  ParameterArea:
+    Type: String
+    Default: site
+  # Bucket Parameters
+  ParameterBucketName:
+    Type: String
+    Default: al-infosec-data
+  ParameterBucketEncryption:
+    Type: String
+    Default: AES256
+
+Resources:
+  ResourceS3BucketInfosecData:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub s3-${ParameterBucketName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref ParameterBucketEncryption
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+        - Id: S3StandardIaRule
+          Prefix: standard_ia
+          Status: Enabled
+          ExpirationInDays: '365'
+          Transitions:
+            - TransitionInDays: '30'
+              StorageClass: STANDARD_IA
+        - Id: S3GlacierRule
+          Prefix: glacier
+          Status: Enabled
+          ExpirationInDays: '3650'
+          Transitions:
+            - TransitionInDays: '365'
+              StorageClass: GLACIER
+        - Id: RMOldSqlBackups
+          Status: Enabled
+          NoncurrentVersionExpirationInDays: 1
+
+
+
+
+S3BucketInfosecDataPolicyRead:
+  Condition: HasCloudFrontReadAccess
+  Type: 'AWS::S3::BucketPolicy'
+  Properties:
+    Bucket: !Ref Bucket
+    PolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+      - Principal:
+          CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+        Action: 's3:GetObject'
+        Effect: Allow
+        Resource: !Sub '${Bucket.Arn}/*'
+
+      Tags:
+        -
+          Key: "Application"
+          Value : !Ref ParameterApplication
+        -
+          Key: "Area"
+          Value : !Ref ParameterArea
+        -
+          Key: "Environment"
+          Value : !Ref ParameterEnvironment
+        -
+          Key: "Environment-Type"
+          Value : !Ref ParameterEnvironmentType
+        -
+          Key: "Name"
+          Value : !Ref ParameterBucketName
+        -
+          Key: "Organization"
+          Value : !Ref ParameterOrganization
+        -
+          Key: "Provisioner-Name"
+          Value : !Ref ParameterProvisionerName
+        -
+          Key: "Provision-Method"
+          Value : !Ref ParameterProvisionMethod
+
+Outputs:
+  OutputResourceS3BucketInfosecData:
+    Description: S3 Bucket Infosec Data
+    Value: !Ref ResourceS3BucketInfosecData
+    Export:
+      Name: !Sub s3-${ParameterBucketName}
